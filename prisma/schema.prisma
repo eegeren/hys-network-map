@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+
+enum StoreStatus {
+  ONLINE
+  WARNING
+  OFFLINE
+}
+enum DeviceType {
+  PC
+  POS
+  PRINTER
+  ROUTER
+  SWITCH
+  SERVER
+  NVR
+  TABLET
+  OTHER
+}
+enum DeviceStatus {
+  ONLINE
+  WARNING
+  OFFLINE
+  UNKNOWN
+}
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+enum AlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Store {
+  id String @id @default(cuid())
+  name String
+  code String @unique
+  city String
+  address String?
+  status StoreStatus @default(ONLINE)
+  devices Device[]
+  alerts Alert[]
+  events Event[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model Device {
+  id String @id @default(cuid())
+  name String @unique
+  hostname String
+  type DeviceType
+  ipAddress String
+  macAddress String?
+  operatingSystem String?
+  status DeviceStatus @default(UNKNOWN)
+  ping Int?
+  cpuUsage Float?
+  ramUsage Float?
+  diskUsage Float?
+  uptime BigInt?
+  lastSeen DateTime?
+  agentVersion String?
+  agentManaged Boolean @default(false)
+  agentId String? @unique
+  description String?
+  location String?
+  serialNumber String?
+  assetTag String?
+  gateway String?
+  dns String?
+  storeId String
+  store Store @relation(fields:[storeId], references:[id], onDelete:Cascade)
+  alerts Alert[]
+  events Event[]
+  metrics DeviceMetric[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model Alert {
+  id String @id @default(cuid())
+  severity AlertSeverity
+  message String
+  status AlertStatus @default(ACTIVE)
+  deviceId String?
+  device Device? @relation(fields:[deviceId], references:[id], onDelete:SetNull)
+  storeId String
+  store Store @relation(fields:[storeId], references:[id], onDelete:Cascade)
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+}
+
+model Settings {
+  id String @id @default("system")
+  systemName String @default("HYS Network Map")
+  timezone String @default("Europe/Istanbul")
+  dateFormat String @default("DD.MM.YYYY HH:mm")
+  autoRefresh Int @default(30)
+  heartbeatInterval Int @default(30)
+  offlineThreshold Int @default(90)
+  pingWarning Int @default(100)
+  pingCritical Int @default(250)
+  cpuWarning Int @default(85)
+  ramWarning Int @default(90)
+  diskWarning Int @default(90)
+  offlineAlerts Boolean @default(true)
+  performanceAlerts Boolean @default(true)
+  pingAlerts Boolean @default(true)
+  alertCooldown Int @default(300)
+  agentVersion String @default("1.0.0")
+  agentSecretHash String?
+  appearance String @default("SYSTEM")
+  updatedAt DateTime @updatedAt
+}
+model Event {
+  id String @id @default(cuid())
+  type String
+  message String
+  deviceId String?
+  device Device? @relation(fields:[deviceId], references:[id], onDelete:SetNull)
+  storeId String
+  store Store @relation(fields:[storeId], references:[id], onDelete:Cascade)
+  createdAt DateTime @default(now())
+}
+model DeviceMetric {
+  id String @id @default(cuid())
+  deviceId String
+  device Device @relation(fields:[deviceId], references:[id], onDelete:Cascade)
+  ping Int?
+  cpu Float?
+  ram Float?
+  disk Float?
+  createdAt DateTime @default(now())
+  @@index([deviceId, createdAt])
+}

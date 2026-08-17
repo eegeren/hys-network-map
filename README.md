@@ -1,5 +1,17 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Windows Agent heartbeat
+
+Create or regenerate the agent secret from **Settings → Agent**. Agents send it as `Authorization: Bearer <secret>` to `POST /api/agent/heartbeat`. The clear-text secret is shown only once; only its SHA-256 hash is stored.
+
+For development, send a sample heartbeat with:
+
+```bash
+HYS_AGENT_SECRET="the-generated-secret" npm run agent:test
+```
+
+Override the default endpoint when necessary with `HYS_AGENT_ENDPOINT`. Run offline evaluation from a scheduler by calling `POST /api/monitor/offline`; it uses the configured offline threshold and is idempotent for devices already offline.
+
 ## Getting Started
 
 First, run the development server:

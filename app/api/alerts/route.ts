@@ -1,0 +1,2 @@
+import { prisma } from "@/lib/prisma";import { unavailable } from "@/lib/api";import { AlertSeverity,AlertStatus } from "@prisma/client";
+export async function GET(req:Request){if(!prisma)return unavailable();const q=new URL(req.url).searchParams;const where={...(q.get("severity")&&{severity:q.get("severity") as AlertSeverity}),...(q.get("status")&&{status:q.get("status") as AlertStatus}),...(q.get("storeId")&&{storeId:q.get("storeId")!})};return Response.json(await prisma.alert.findMany({where,include:{device:true,store:true},orderBy:{createdAt:"desc"},take:250}))}
