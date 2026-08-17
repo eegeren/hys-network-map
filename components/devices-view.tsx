@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
-import type { Device, DeviceType, Status } from "@/lib/mock-data";
+import type { Device, DeviceType, Status } from "@/lib/device-types";
 import { formatMetric, formatUptime, relativeTime } from "@/lib/device-format";
 
-type ApiDevice = {
+export type ApiDevice = {
   id: string;
   name: string;
   hostname: string;
@@ -45,7 +45,7 @@ const typeLabels: Record<string, DeviceType> = {
   OTHER: "Other",
 };
 
-function toDrawerDevice(d: ApiDevice): Device {
+export function apiDeviceToUiDevice(d: ApiDevice): Device {
   return {
     id: d.id,
     name: d.name,
@@ -192,7 +192,10 @@ export function DevicesView({
               </thead>
               <tbody>
                 {devices.map((d) => (
-                  <tr key={d.id} onClick={() => onDevice(toDrawerDevice(d))}>
+                  <tr
+                    key={d.id}
+                    onClick={() => onDevice(apiDeviceToUiDevice(d))}
+                  >
                     <td>
                       <span
                         className={`table-status ${d.status.toLowerCase()}`}

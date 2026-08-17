@@ -24,7 +24,6 @@ import {
   Bell,
   Building2,
   ChevronRight,
-  CircleGauge,
   Cpu,
   Database,
   HardDrive,
@@ -46,15 +45,12 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import type { Device, DeviceType, Status } from "@/lib/device-types";
 import {
-  alerts,
-  devices as seedDevices,
-  stores,
-  type Device,
-  type DeviceType,
-  type Status,
-} from "@/lib/mock-data";
-import { DevicesView } from "@/components/devices-view";
+  DevicesView,
+  apiDeviceToUiDevice,
+  type ApiDevice,
+} from "@/components/devices-view";
 import { formatMetric } from "@/lib/device-format";
 
 const statusLabel: Record<Status, string> = {
@@ -63,6 +59,23 @@ const statusLabel: Record<Status, string> = {
   offline: "Çevrimdışı",
   unknown: "Bilinmiyor",
 };
+const stores: Array<{
+  name: string;
+  code: string;
+  status: Status;
+  devices: number;
+  online: number;
+  issue: string;
+  ping: number;
+  seen: string;
+}> = [];
+const alerts: Array<{
+  severity: string;
+  device: string;
+  store: string;
+  message: string;
+  time: string;
+}> = [];
 const deviceIcon: Record<
   DeviceType,
   ComponentType<{ size?: number; strokeWidth?: number }>
@@ -442,22 +455,7 @@ function ManagementPage({
         />
         <Toolbar query={query} setQuery={setQuery} filters />
         <div className="panel event-table">
-          {[
-            ["14:42", "DEVICE_ONLINE", "BND-POS-01 çevrimiçi oldu."],
-            ["14:38", "DEVICE_OFFLINE", "ERDEK-POS-02 çevrimdışı oldu."],
-            ["14:31", "HIGH_DISK", "BND-OFFICE-01 disk kullanımı %91 oldu."],
-            ["14:25", "HIGH_PING", "BIGA Router gecikmesi normale döndü."],
-          ].map((e) => (
-            <div key={e[0]}>
-              <time>{e[0]}</time>
-              <span className="event-icon">
-                <Activity size={15} />
-              </span>
-              <b>{e[1]}</b>
-              <p>{e[2]}</p>
-              <small>Bandırma Köroğlu</small>
-            </div>
-          ))}
+          <div className="data-state">Gerçek olay kaydı bulunmuyor.</div>
         </div>
       </>
     );
@@ -538,7 +536,7 @@ function ManagementPage({
     <>
       <PageTop title={page} desc="Detay görünümü" />
       <div className="panel detail-page">
-        <h2>{page === "Store Details" ? "Bandırma Köroğlu" : "BND-POS-01"}</h2>
+        <h2>Gerçek kayıt detayı</h2>
         <div className="detail-tabs">
           <button>Overview</button>
           <button>Network</button>
@@ -677,8 +675,7 @@ export function MonitoringApp({
   const [dark, setDark] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [selected, setSelected] = useState<Device | null>(null);
-  const [devices, setDevices] = useState(seedDevices);
-  const [sim, setSim] = useState(true);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [liveSummary, setLiveSummary] = useState<{
     stores: number;
     total: number;
@@ -694,13 +691,13 @@ export function MonitoringApp({
       fetch("/api/stores", { cache: "no-store" }),
     ])
       .then(async ([deviceResponse, storeResponse]) => {
-        if (!deviceResponse.ok || !storeResponse.ok) return;
+        if (!deviceResponse.ok) return;
         const devicePayload: {
-          items: Array<{ status: string }>;
+          items: ApiDevice[];
           total: number;
         } = await deviceResponse.json();
         const storePayload: Array<{ code: string; name: string }> =
-          await storeResponse.json();
+          storeResponse.ok ? await storeResponse.json() : [];
         setLiveSummary({
           stores: storePayload.filter(
             (s) => s.code !== "UNASSIGNED" && s.name !== "Unassigned Devices",
@@ -711,31 +708,10 @@ export function MonitoringApp({
           offline: devicePayload.items.filter((d) => d.status === "OFFLINE")
             .length,
         });
+        setDevices(devicePayload.items.map(apiDeviceToUiDevice));
       })
       .catch(() => {});
   }, []);
-  useEffect(() => {
-    if (!sim) return;
-    const id = setInterval(
-      () =>
-        setDevices((ds) =>
-          ds.map((d) =>
-            d.id === "pos2"
-              ? {
-                  ...d,
-                  ping:
-                    Math.random() > 0.7
-                      ? 124
-                      : Math.floor(8 + Math.random() * 12),
-                  status: Math.random() > 0.78 ? "warning" : "online",
-                }
-              : d,
-          ),
-        ),
-      5000,
-    );
-    return () => clearInterval(id);
-  }, [sim]);
   const nodes = useMemo<Node<Device>[]>(
     () =>
       devices.map((d, i) => ({
@@ -802,7 +778,6 @@ export function MonitoringApp({
             >
               <Icon size={18} />
               <span>{label}</span>
-              {label === "Alerts" && <b>6</b>}
             </a>
           ))}
         </nav>
@@ -811,7 +786,7 @@ export function MonitoringApp({
             <span className="pulse" />
             <div>
               <strong>Sistem Aktif</strong>
-              <small>87 cihaz izleniyor</small>
+              <small>{liveSummary?.total ?? 0} cihaz izleniyor</small>
             </div>
           </div>
           <div className="profile">
@@ -873,33 +848,33 @@ export function MonitoringApp({
               <section className="stats">
                 <StatCard
                   label="Toplam Mağaza"
-                  value={String(liveSummary?.stores ?? 14)}
+                  value={String(liveSummary?.stores ?? 0)}
                   detail="Tüm lokasyonlar aktif"
                   icon={Store}
                   tone="blue"
                 />
                 <StatCard
                   label="Çevrimiçi Cihaz"
-                  value={`${liveSummary?.online ?? 83} / ${liveSummary?.total ?? 87}`}
+                  value={`${liveSummary?.online ?? 0} / ${liveSummary?.total ?? 0}`}
                   detail={
                     liveSummary?.total
                       ? `%${Math.round((liveSummary.online / liveSummary.total) * 1000) / 10} kullanılabilirlik`
-                      : "%95.4 kullanılabilirlik"
+                      : "Henüz cihaz verisi yok"
                   }
                   icon={Wifi}
                   tone="green"
                 />
                 <StatCard
                   label="Çevrimdışı"
-                  value={String(liveSummary?.offline ?? 4)}
-                  detail="2 cihaz yeni çevrimdışı"
+                  value={String(liveSummary?.offline ?? 0)}
+                  detail="Gerçek cihaz durumu"
                   icon={Radio}
                   tone="red"
                 />
                 <StatCard
                   label="Aktif Uyarı"
-                  value="6"
-                  detail="1 kritik uyarı"
+                  value="0"
+                  detail="Aktif uyarı bulunmuyor"
                   icon={AlertTriangle}
                   tone="amber"
                 />
@@ -909,7 +884,7 @@ export function MonitoringApp({
                   <div className="panel-title">
                     <div>
                       <h3>Ağ Topolojisi</h3>
-                      <p>Bandırma Köroğlu · Canlı görünüm</p>
+                      <p>Gerçek cihazlar · Canlı görünüm</p>
                     </div>
                     <div className="legend">
                       <span>
@@ -976,9 +951,9 @@ export function MonitoringApp({
                       </div>
                     ))}
                   </div>
-                  <button className="alert-footer">
-                    6 aktif uyarının tümünü görüntüle <ChevronRight size={15} />
-                  </button>
+                  <div className="alert-footer">
+                    Gerçek uyarı kaydı bulunmuyor
+                  </div>
                 </article>
               </section>
               <section className="panel stores-panel">
@@ -1043,22 +1018,7 @@ export function MonitoringApp({
               </section>
               <section className="events">
                 <h3>Son Olaylar</h3>
-                {[
-                  ["14:42", "BND-POS-01 çevrimiçi oldu.", "online"],
-                  ["14:38", "ERDEK-POS-02 çevrimdışı oldu.", "offline"],
-                  [
-                    "14:31",
-                    "BND-OFFICE-01 disk kullanımı %91 oldu.",
-                    "warning",
-                  ],
-                  ["14:25", "BIGA Router gecikmesi normale döndü.", "online"],
-                ].map((e) => (
-                  <div key={e[0]}>
-                    <time>{e[0]}</time>
-                    <i className={e[2]} />
-                    <span>{e[1]}</span>
-                  </div>
-                ))}
+                <div className="data-state">Gerçek olay kaydı bulunmuyor.</div>
               </section>
             </>
           )}
@@ -1151,13 +1111,6 @@ export function MonitoringApp({
           </aside>
         </>
       )}
-      <button
-        className={sim ? "sim active" : "sim"}
-        onClick={() => setSim((v) => !v)}
-      >
-        <CircleGauge size={16} />
-        Demo simülasyon: {sim ? "Açık" : "Kapalı"}
-      </button>
     </div>
   );
 }
