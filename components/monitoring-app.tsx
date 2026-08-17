@@ -54,6 +54,8 @@ import {
   type DeviceType,
   type Status,
 } from "@/lib/mock-data";
+import { DevicesView } from "@/components/devices-view";
+import { formatMetric } from "@/lib/device-format";
 
 const statusLabel: Record<Status, string> = {
   online: "Çevrimiçi",
@@ -64,7 +66,17 @@ const statusLabel: Record<Status, string> = {
 const deviceIcon: Record<
   DeviceType,
   ComponentType<{ size?: number; strokeWidth?: number }>
-> = { Router, Switch: Network, POS: Monitor, PC: Monitor, Printer, Server };
+> = {
+  Router,
+  Switch: Network,
+  POS: Monitor,
+  PC: Monitor,
+  Printer,
+  Server,
+  NVR: Monitor,
+  Tablet: Monitor,
+  Other: Monitor,
+};
 const nav = [
   ["Dashboard", LayoutDashboard],
   ["Network Map", Network],
@@ -93,7 +105,7 @@ function DeviceNode({ data }: NodeProps<Node<Device>>) {
       </small>
       <div className="node-foot">
         <span>{statusLabel[data.status]}</span>
-        <b>{data.ping} ms</b>
+        <b>{data.ping == null ? "-" : `${data.ping} ms`}</b>
       </div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -128,41 +140,141 @@ function StatCard({
   );
 }
 
-type AgentStatusData = { configured:boolean; latestVersion:string; heartbeatInterval:number; offlineThreshold:number; agents:Array<{id:string;hostname:string;store:string;ipAddress:string;agentVersion:string|null;status:string;lastHeartbeat:string|null}> };
+type AgentStatusData = {
+  configured: boolean;
+  latestVersion: string;
+  heartbeatInterval: number;
+  offlineThreshold: number;
+  agents: Array<{
+    id: string;
+    hostname: string;
+    store: string;
+    ipAddress: string;
+    agentVersion: string | null;
+    status: string;
+    lastHeartbeat: string | null;
+  }>;
+};
 function AgentSettings() {
-  const [data,setData]=useState<AgentStatusData|null>(null); const [secret,setSecret]=useState(""); const [message,setMessage]=useState("");
-  const load=useCallback(()=>fetch("/api/agent/register").then(r=>r.ok?r.json():null).then(setData),[]);
-  useEffect(()=>{load()},[load]);
-  async function generate(){const r=await fetch("/api/agent/register",{method:"POST"}),j=await r.json();if(r.ok){setSecret(j.secret);setMessage(j.message);load()}else setMessage(j.error||"Secret oluşturulamadı.")}
-  async function copy(){if(secret){await navigator.clipboard.writeText(secret);setMessage("Secret panoya kopyalandı.")}}
-  return <div className="agent-settings">
-    <div className="agent-summary"><span><b>HYS Agent Status</b><strong>{data?.configured?"Hazır":"Secret gerekli"}</strong></span><span><b>Registered Agents</b><strong>{data?.agents.length??"—"}</strong></span><span><b>Latest Version</b><strong>{data?.latestVersion??"—"}</strong></span><span><b>Heartbeat / Offline</b><strong>{data?`${data.heartbeatInterval}s / ${data.offlineThreshold}s`:"—"}</strong></span></div>
-    <Field label="API Endpoint" value="/api/agent/heartbeat"/>
-    <div className="secret-box"><span>Agent Secret</span><code>{secret|| (data?.configured?"••••••••••••••••••••":"Henüz oluşturulmadı")}</code><button type="button" onClick={generate}>{data?.configured?"Regenerate":"Generate"}</button><button type="button" onClick={copy} disabled={!secret}>Copy</button></div>
-    {message&&<p className="agent-message">{message}</p>}
-    <small>Secret yalnızca üretildiği anda gösterilir; veritabanında yalnızca SHA-256 hash saklanır.</small>
-    <h4>Registered Agents</h4><div className="table-wrap"><table><thead><tr><th>Hostname</th><th>Store</th><th>IP</th><th>Agent Version</th><th>Status</th><th>Last Heartbeat</th></tr></thead><tbody>{data?.agents.map(a=><tr key={a.id}><td><b>{a.hostname}</b></td><td>{a.store}</td><td>{a.ipAddress}</td><td>{a.agentVersion||"—"}</td><td>{a.status}</td><td>{a.lastHeartbeat?new Date(a.lastHeartbeat).toLocaleString("tr-TR"):"—"}</td></tr>)}</tbody></table></div>
-  </div>
+  const [data, setData] = useState<AgentStatusData | null>(null);
+  const [secret, setSecret] = useState("");
+  const [message, setMessage] = useState("");
+  const load = useCallback(
+    () =>
+      fetch("/api/agent/register")
+        .then((r) => (r.ok ? r.json() : null))
+        .then(setData),
+    [],
+  );
+  useEffect(() => {
+    load();
+  }, [load]);
+  async function generate() {
+    const r = await fetch("/api/agent/register", { method: "POST" }),
+      j = await r.json();
+    if (r.ok) {
+      setSecret(j.secret);
+      setMessage(j.message);
+      load();
+    } else setMessage(j.error || "Secret oluşturulamadı.");
+  }
+  async function copy() {
+    if (secret) {
+      await navigator.clipboard.writeText(secret);
+      setMessage("Secret panoya kopyalandı.");
+    }
+  }
+  return (
+    <div className="agent-settings">
+      <div className="agent-summary">
+        <span>
+          <b>HYS Agent Status</b>
+          <strong>{data?.configured ? "Hazır" : "Secret gerekli"}</strong>
+        </span>
+        <span>
+          <b>Registered Agents</b>
+          <strong>{data?.agents.length ?? "—"}</strong>
+        </span>
+        <span>
+          <b>Latest Version</b>
+          <strong>{data?.latestVersion ?? "—"}</strong>
+        </span>
+        <span>
+          <b>Heartbeat / Offline</b>
+          <strong>
+            {data
+              ? `${data.heartbeatInterval}s / ${data.offlineThreshold}s`
+              : "—"}
+          </strong>
+        </span>
+      </div>
+      <Field label="API Endpoint" value="/api/agent/heartbeat" />
+      <div className="secret-box">
+        <span>Agent Secret</span>
+        <code>
+          {secret ||
+            (data?.configured ? "••••••••••••••••••••" : "Henüz oluşturulmadı")}
+        </code>
+        <button type="button" onClick={generate}>
+          {data?.configured ? "Regenerate" : "Generate"}
+        </button>
+        <button type="button" onClick={copy} disabled={!secret}>
+          Copy
+        </button>
+      </div>
+      {message && <p className="agent-message">{message}</p>}
+      <small>
+        Secret yalnızca üretildiği anda gösterilir; veritabanında yalnızca
+        SHA-256 hash saklanır.
+      </small>
+      <h4>Registered Agents</h4>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Hostname</th>
+              <th>Store</th>
+              <th>IP</th>
+              <th>Agent Version</th>
+              <th>Status</th>
+              <th>Last Heartbeat</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data?.agents.map((a) => (
+              <tr key={a.id}>
+                <td>
+                  <b>{a.hostname}</b>
+                </td>
+                <td>{a.store}</td>
+                <td>{a.ipAddress}</td>
+                <td>{a.agentVersion || "—"}</td>
+                <td>{a.status}</td>
+                <td>
+                  {a.lastHeartbeat
+                    ? new Date(a.lastHeartbeat).toLocaleString("tr-TR")
+                    : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function ManagementPage({
   page,
-  devices,
   onDevice,
 }: {
   page: string;
-  devices: Device[];
   onDevice: (d: Device) => void;
 }) {
   const [query, setQuery] = useState("");
   const [, setModal] = useState<string | null>(null);
   const [tab, setTab] = useState("General");
   const [, setNotice] = useState("");
-  const filtered = devices.filter((d) =>
-    `${d.name} ${d.hostname} ${d.ip} ${d.store}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
   if (page === "Network Map")
     return (
       <>
@@ -269,55 +381,7 @@ function ManagementPage({
           action="Cihaz Ekle"
           onAction={() => setModal("device")}
         />
-        <Toolbar query={query} setQuery={setQuery} filters />
-        <div className="panel table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Durum</th>
-                <th>Cihaz</th>
-                <th>Hostname</th>
-                <th>Mağaza</th>
-                <th>Tip</th>
-                <th>IP</th>
-                <th>OS</th>
-                <th>Ping</th>
-                <th>CPU</th>
-                <th>RAM</th>
-                <th>Disk</th>
-                <th>Son Görülme</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((d) => (
-                <tr key={d.id} onClick={() => onDevice(d)}>
-                  <td>
-                    <span className={`table-status ${d.status}`} />
-                    {statusLabel[d.status]}
-                  </td>
-                  <td>
-                    <b>{d.name}</b>
-                  </td>
-                  <td>{d.hostname}</td>
-                  <td>{d.store}</td>
-                  <td>{d.type}</td>
-                  <td className="mono">{d.ip}</td>
-                  <td>{d.os}</td>
-                  <td>{d.ping} ms</td>
-                  <td>%{d.cpu}</td>
-                  <td>%{d.ram}</td>
-                  <td>%{d.disk}</td>
-                  <td>{d.lastSeen}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="pagination">
-            1–{filtered.length} / {filtered.length} kayıt <button>‹</button>
-            <button>1</button>
-            <button>›</button>
-          </div>
-        </div>
+        <DevicesView onDevice={onDevice} />
       </>
     );
   if (page === "Alerts")
@@ -457,9 +521,7 @@ function ManagementPage({
                 <Field label="Uyarı bekleme süresi (sn)" value="300" />
               </>
             )}
-            {tab === "Agent" && (
-              <AgentSettings />
-            )}
+            {tab === "Agent" && <AgentSettings />}
             {tab === "Appearance" && (
               <div className="appearance">
                 <button type="button">Light</button>
@@ -617,9 +679,41 @@ export function MonitoringApp({
   const [selected, setSelected] = useState<Device | null>(null);
   const [devices, setDevices] = useState(seedDevices);
   const [sim, setSim] = useState(true);
+  const [liveSummary, setLiveSummary] = useState<{
+    stores: number;
+    total: number;
+    online: number;
+    offline: number;
+  } | null>(null);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/devices?limit=100", { cache: "no-store" }),
+      fetch("/api/stores", { cache: "no-store" }),
+    ])
+      .then(async ([deviceResponse, storeResponse]) => {
+        if (!deviceResponse.ok || !storeResponse.ok) return;
+        const devicePayload: {
+          items: Array<{ status: string }>;
+          total: number;
+        } = await deviceResponse.json();
+        const storePayload: Array<{ code: string; name: string }> =
+          await storeResponse.json();
+        setLiveSummary({
+          stores: storePayload.filter(
+            (s) => s.code !== "UNASSIGNED" && s.name !== "Unassigned Devices",
+          ).length,
+          total: devicePayload.total,
+          online: devicePayload.items.filter((d) => d.status === "ONLINE")
+            .length,
+          offline: devicePayload.items.filter((d) => d.status === "OFFLINE")
+            .length,
+        });
+      })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (!sim) return;
     const id = setInterval(
@@ -761,11 +855,7 @@ export function MonitoringApp({
         </header>
         <div className="content">
           {active !== "Dashboard" ? (
-            <ManagementPage
-              page={active}
-              devices={devices}
-              onDevice={setSelected}
-            />
+            <ManagementPage page={active} onDevice={setSelected} />
           ) : (
             <>
               <section className="welcome">
@@ -783,21 +873,25 @@ export function MonitoringApp({
               <section className="stats">
                 <StatCard
                   label="Toplam Mağaza"
-                  value="14"
+                  value={String(liveSummary?.stores ?? 14)}
                   detail="Tüm lokasyonlar aktif"
                   icon={Store}
                   tone="blue"
                 />
                 <StatCard
                   label="Çevrimiçi Cihaz"
-                  value="83 / 87"
-                  detail="%95.4 kullanılabilirlik"
+                  value={`${liveSummary?.online ?? 83} / ${liveSummary?.total ?? 87}`}
+                  detail={
+                    liveSummary?.total
+                      ? `%${Math.round((liveSummary.online / liveSummary.total) * 1000) / 10} kullanılabilirlik`
+                      : "%95.4 kullanılabilirlik"
+                  }
                   icon={Wifi}
                   tone="green"
                 />
                 <StatCard
                   label="Çevrimdışı"
-                  value="4"
+                  value={String(liveSummary?.offline ?? 4)}
                   detail="2 cihaz yeni çevrimdışı"
                   icon={Radio}
                   tone="red"
@@ -997,25 +1091,28 @@ export function MonitoringApp({
                 <div>
                   <Activity />
                   <span>
-                    Ping<strong>{selected.ping} ms</strong>
+                    Ping
+                    <strong>
+                      {selected.ping == null ? "-" : `${selected.ping} ms`}
+                    </strong>
                   </span>
                 </div>
                 <div>
                   <Cpu />
                   <span>
-                    CPU<strong>%{selected.cpu}</strong>
+                    CPU<strong>{formatMetric(selected.cpu)}</strong>
                   </span>
                 </div>
                 <div>
                   <Database />
                   <span>
-                    RAM<strong>%{selected.ram}</strong>
+                    RAM<strong>{formatMetric(selected.ram)}</strong>
                   </span>
                 </div>
                 <div>
                   <HardDrive />
                   <span>
-                    Disk<strong>%{selected.disk}</strong>
+                    Disk<strong>{formatMetric(selected.disk)}</strong>
                   </span>
                 </div>
               </section>

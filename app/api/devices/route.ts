@@ -10,9 +10,11 @@ export async function GET(req: Request) {
     ...(q.get("status") && { status: q.get("status") as DeviceStatus }),
     ...(q.get("type") && { type: q.get("type") as DeviceType }),
     ...(q.get("search") && {
-      OR: ["name", "hostname", "ipAddress", "macAddress"].map((k) => ({
-        [k]: { contains: q.get("search")!, mode: "insensitive" as const },
-      })),
+      OR: ["name", "hostname", "ipAddress", "macAddress", "assetTag"].map(
+        (k) => ({
+          [k]: { contains: q.get("search")!, mode: "insensitive" as const },
+        }),
+      ),
     }),
   };
   const page = Math.max(1, Number(q.get("page")) || 1),
